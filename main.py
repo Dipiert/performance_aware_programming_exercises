@@ -2,6 +2,7 @@ from enum import Enum
 import logging
 import argparse
 import sys
+import re
 from pathlib import Path
 
 
@@ -57,11 +58,30 @@ reg_field_encoding = {
 inv_reg_field_encoding = invert_map(reg_field_encoding)
 
 
+def parse_instruction_line(line: str, line_num: int):
+    """Parse a source line into (instruction, lhs, rhs).
+    - Normalizes to lower-case
+    - Splits on commas and whitespace so `mov cx,bx` and `mov cx, bx` both work
+    - Raises ValueError on malformed input or unexpected extra tokens
+    """
+    tokens = [t for t in re.split(r"[,\s]+", line) if t]
+    if not tokens:
+        return None
+
+    if len(tokens) < 3:
+        raise ValueError(f"Line {line_num}: Invalid instruction format: {line}")
+
+    instruction_name, lhs, rhs, *rest = (t.lower() for t in tokens)
+    if rest:
+        raise ValueError(f"Line {line_num}: Unexpected tokens in instruction: {' '.join(rest)}")
+
+    return instruction_name, lhs, rhs
+
+
 def assemble(input_path, output_path):
     """Assemble x86 assembly code to machine code."""
     logger.info("Assembling. Will generate a file called %s", output_path)
     
-    # Validate input file exists
     input_file = Path(input_path)
     if not input_file.exists():
         logger.error("Input file not found: %s", input_path)
@@ -73,46 +93,53 @@ def assemble(input_path, output_path):
             for line_num, line in enumerate(f, 1):
                 line = line.rstrip()
                 
-                # Skip empty lines, directives, and comments
-                if not line or line in ("bits 16",) or line.startswith(";"):
+                if not line:
+                    logger.debug("Line %d: Skipping empty/blank line", line_num)
+                    continue
+
+                if line.strip().lower() == "bits 16":
+                    logger.debug("Line %d: Skipping directive: %s", line_num, line.strip())
+                    continue
+
+                if line.lstrip().startswith(";"):
+                    logger.debug("Line %d: Skipping comment line", line_num)
                     continue
                 
-                instruction_name = line.split()[0].lower()
-                
+                try:
+                    parsed = parse_instruction_line(line, line_num)
+                except ValueError as e:
+                    logger.error(str(e))
+                    sys.exit(1)
+
+                if parsed is None:
+                    logger.debug("Line %d: Skipping line after parsing (blank or directive)", line_num)
+                    continue
+
+                instruction_name, lhs, rhs = parsed
+
                 if instruction_name == Instructions.MOV:
                     logger.debug("Line %d: Identified %s instruction", line_num, instruction_name)
-                    
-                    try:
-                        operands = line.split(Instructions.MOV)[1].split(",")
-                        if len(operands) != 2:
-                            logger.error("Line %d: Invalid operand count for MOV instruction", line_num)
-                            sys.exit(1)
-                        
-                        lhs, rhs = operands[0].strip(), operands[1].strip()
-                    except (IndexError, ValueError) as e:
-                        logger.error("Line %d: Failed to parse operands: %s", line_num, e)
-                        sys.exit(1)
-                    
+
                     output.append(inv_instruction_map[Instructions.MOV])
                     output.append("0")  # direction: 0 = to REG
                     logger.debug("Direction: 0")
-                    
+
                     try:
                         reg, w = inv_reg_field_encoding[rhs]
                         rm, _ = inv_reg_field_encoding[lhs]
                     except KeyError as e:
                         logger.error("Line %d: Invalid register: %s", line_num, e)
                         sys.exit(1)
-                    
+
                     output.append(w)
                     logger.debug("Width: %s", w)
-                    
+
                     output.append(MOD_REGISTER_TO_REGISTER)
                     logger.debug("Mode: %s", MOD_REGISTER_TO_REGISTER)
-                    
+
                     output.append(reg)
                     logger.debug("Reg: %s (%s)", reg, rhs)
-                    
+
                     output.append(rm)
                     logger.debug("R/M: %s (%s)", rm, lhs)
                 else:

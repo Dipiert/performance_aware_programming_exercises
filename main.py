@@ -4,9 +4,10 @@ import argparse
 import sys
 import re
 from pathlib import Path
+from typing import Dict, Tuple, Optional, List, Any
 
 
-def setup_logger():
+def setup_logger() -> logging.Logger:
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
     handler = logging.StreamHandler()
@@ -18,24 +19,24 @@ def setup_logger():
 logger = setup_logger()
 
 # Constants
-WORD_SIZE = 2  # bytes
-BYTE_WIDTH = 8  # bits
-MOD_REGISTER_TO_REGISTER = "11"
+WORD_SIZE: int = 2  # bytes
+BYTE_WIDTH: int = 8  # bits
+MOD_REGISTER_TO_REGISTER: str = "11"
 
 class Instructions(str, Enum):
     MOV = "mov"
 
-instruction_map = {
+instruction_map: Dict[str, Instructions] = {
     "100010": Instructions.MOV
 }
 
-def invert_map(mapping):
+def invert_map(mapping: Dict[Any, Any]) -> Dict[Any, Any]:
     """Create reverse mapping from values to keys."""
     return {v: k for k, v in mapping.items()}
-    
-inv_instruction_map = invert_map(instruction_map)
 
-reg_field_encoding = {
+inv_instruction_map: Dict[Instructions, str] = invert_map(instruction_map)
+
+reg_field_encoding: Dict[Tuple[str, str], str] = {
     # (REG, W) 
     ("000", "0"): "al",
     ("000", "1"): "ax",
@@ -55,16 +56,16 @@ reg_field_encoding = {
     ("111", "1"): "di",
 }
 
-inv_reg_field_encoding = invert_map(reg_field_encoding)
+inv_reg_field_encoding: Dict[str, Tuple[str, str]] = invert_map(reg_field_encoding)
 
 
-def parse_instruction_line(line: str, line_num: int):
+def _parse_instruction_line(line: str, line_num: int) -> Optional[Tuple[str, str, str]]:
     """Parse a source line into (instruction, lhs, rhs).
     - Normalizes to lower-case
     - Splits on commas and whitespace so `mov cx,bx` and `mov cx, bx` both work
     - Raises ValueError on malformed input or unexpected extra tokens
     """
-    tokens = [t for t in re.split(r"[,\s]+", line) if t]
+    tokens: List[str] = [t for t in re.split(r"[,\s]+", line) if t]
     if not tokens:
         return None
 
@@ -78,16 +79,16 @@ def parse_instruction_line(line: str, line_num: int):
     return instruction_name, lhs, rhs
 
 
-def assemble(input_path, output_path):
+def assemble(input_path: str, output_path: str) -> None:
     """Assemble x86 assembly code to machine code."""
     logger.info("Assembling. Will generate a file called %s", output_path)
     
-    input_file = Path(input_path)
+    input_file: Path = Path(input_path)
     if not input_file.exists():
         logger.error("Input file not found: %s", input_path)
         sys.exit(1)
     
-    output = ["0b"]
+    output_bytes: bytearray = bytearray()
     try:
         with open(input_file) as f:
             for line_num, line in enumerate(f, 1):
@@ -106,7 +107,7 @@ def assemble(input_path, output_path):
                     continue
                 
                 try:
-                    parsed = parse_instruction_line(line, line_num)
+                    parsed = _parse_instruction_line(line, line_num)
                 except ValueError as e:
                     logger.error(str(e))
                     sys.exit(1)
@@ -120,10 +121,6 @@ def assemble(input_path, output_path):
                 if instruction_name == Instructions.MOV:
                     logger.debug("Line %d: Identified %s instruction", line_num, instruction_name)
 
-                    output.append(inv_instruction_map[Instructions.MOV])
-                    output.append("0")  # direction: 0 = to REG
-                    logger.debug("Direction: 0")
-
                     try:
                         reg, w = inv_reg_field_encoding[rhs]
                         rm, _ = inv_reg_field_encoding[lhs]
@@ -131,30 +128,35 @@ def assemble(input_path, output_path):
                         logger.error("Line %d: Invalid register: %s", line_num, e)
                         sys.exit(1)
 
-                    output.append(w)
-                    logger.debug("Width: %s", w)
+                    opcode_int: int = int(inv_instruction_map[Instructions.MOV], 2)
+                    d_int: int = 0  # direction: 0 = to REG
+                    w_int: int = int(w, 2)  # width bit (0 or 1)
+                    reg_int: int = int(reg, 2)  # 3-bit reg field
+                    rm_int: int = int(rm, 2)  # 3-bit r/m field
 
-                    output.append(MOD_REGISTER_TO_REGISTER)
-                    logger.debug("Mode: %s", MOD_REGISTER_TO_REGISTER)
+                    first_byte: int = (opcode_int << 2) | (d_int << 1) | w_int
+                    mod_int: int = int(MOD_REGISTER_TO_REGISTER, 2)
+                    second_byte: int = (mod_int << 6) | (reg_int << 3) | rm_int
 
-                    output.append(reg)
-                    logger.debug("Reg: %s (%s)", reg, rhs)
+                    if not (0 <= first_byte <= 0xFF and 0 <= second_byte <= 0xFF):
+                        logger.error("Line %d: Encoded bytes out of range: %d, %d", 
+                                   line_num, first_byte, second_byte)
+                        sys.exit(1)
 
-                    output.append(rm)
-                    logger.debug("R/M: %s (%s)", rm, lhs)
+                    output_bytes.extend([first_byte, second_byte])
+
+                    debug_bin: str = format(first_byte, '08b') + format(second_byte, '08b')
+                    logger.debug("Line %d: Encoded bytes (binary): %s", line_num, debug_bin)
+                    logger.debug("Direction: %d, Width: %d", d_int, w_int)
+                    logger.debug("Mode: %s, Reg: %s (%s), R/M: %s (%s)", 
+                               MOD_REGISTER_TO_REGISTER, reg, rhs, rm, lhs)
                 else:
                     logger.warning("Line %d: Unsupported instruction: %s", line_num, instruction_name)
         
-        logger.debug("Output: %s", "".join(output))
+        logger.debug("Output bytes: %d total", len(output_bytes))
         
-        binary_str = "".join(output)
         with open(output_path, "wb") as result:
-            # Skip the "0b" prefix and convert in 8-bit chunks
-            for i in range(2, len(binary_str), BYTE_WIDTH):
-                byte_str = binary_str[i : i + BYTE_WIDTH]
-                if len(byte_str) == BYTE_WIDTH:
-                    chunk = int(byte_str, 2).to_bytes(1, 'big')
-                    result.write(chunk)
+            result.write(output_bytes)
         
         logger.info("Generated file: %s", output_path)
         
@@ -166,11 +168,11 @@ def assemble(input_path, output_path):
         sys.exit(1)
 
 
-def disassemble(input_path, output_path):
+def disassemble(input_path: str, output_path: str) -> None:
     """Disassemble machine code to x86 assembly."""
     logger.info("Disassembling - Will write %s.asm", output_path)
     
-    input_file = Path(input_path)
+    input_file: Path = Path(input_path)
     if not input_file.exists():
         logger.error("Input file not found: %s", input_path)
         sys.exit(1)
@@ -215,9 +217,9 @@ def disassemble(input_path, output_path):
                                 sys.exit(1)
                             
                             if d == "0":
-                                result.write(f"{Instructions.MOV} {rm}, {reg}\n")
+                                result.write(f"{instruction} {rm}, {reg}\n")
                             elif d == "1":
-                                result.write(f"{Instructions.MOV} {reg}, {rm}\n")
+                                result.write(f"{instruction} {reg}, {rm}\n")
                     else:
                         logger.warning("Unknown opcode: %s", opcode)
         

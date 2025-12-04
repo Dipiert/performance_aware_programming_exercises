@@ -27,7 +27,7 @@ class Instructions(str, Enum):
     MOV = "mov"
 
 instruction_map: Dict[str, Instructions] = {
-    "100010": Instructions.MOV
+    ("100010", "Register/memory to/from register") : Instructions.MOV #START FROM HERE dam
 }
 
 def invert_map(mapping: Dict[Any, Any]) -> Dict[Any, Any]:
@@ -56,6 +56,18 @@ reg_field_encoding: Dict[Tuple[str, str], str] = {
     ("111", "1"): "di",
 }
 
+eff_addr_encoding= {
+    # (Register1, Register2): R/M
+    ("bx", "si"): "000",
+    ("bx", "di"): "001",
+    ("bp", "si"): "010",
+    ("bp", "di"): "011",
+    ("si", None): "100",
+    ("di", None): "101",
+    ("bx", None): "110",        
+    ("bp", None): "111",        
+}
+
 inv_reg_field_encoding: Dict[str, Tuple[str, str]] = invert_map(reg_field_encoding)
 
 
@@ -72,9 +84,12 @@ def _parse_instruction_line(line: str, line_num: int) -> Optional[Tuple[str, str
     if len(tokens) < 3:
         raise ValueError(f"Line {line_num}: Invalid instruction format: {line}")
 
-    instruction_name, lhs, rhs, *rest = (t.lower() for t in tokens)
-    if rest:
-        raise ValueError(f"Line {line_num}: Unexpected tokens in instruction: {' '.join(rest)}")
+    if len(tokens) > 3:
+        tokens = tokens[:2] + [''.join(tokens[2:])]
+
+    instruction_name, lhs, rhs = (t.lower() for t in tokens)
+    #if rest:
+    #     raise ValueError(f"Line {line_num}: Unexpected tokens in instruction: {' '.join(rest)}")
 
     return instruction_name, lhs, rhs
 
@@ -122,8 +137,28 @@ def assemble(input_path: str, output_path: str) -> None:
                     logger.debug("Line %d: Identified %s instruction", line_num, instruction_name)
 
                     try:
-                        reg, w = inv_reg_field_encoding[rhs]
-                        rm, _ = inv_reg_field_encoding[lhs]
+                        reg, w = inv_reg_field_encoding.get(rhs, (None, None))
+                        if reg is None:
+                            if "[" in rhs and "]" in rhs:
+                               logger.debug("[MOV] Immediate-to-register")
+                               m = re.search(r'\[(.*?)\]', rhs)
+                               if m:
+                                   src_add_calc_lhs = m.group(1).split('+')[0]
+                                   src_add_calc_rhs = m.group(1).split('+')[1]
+                                   rm = eff_addr_encoding.get((src_add_calc_lhs, src_add_calc_rhs))
+                                   first_byte = int(, 2)
+                                   
+                            try:
+                                int(rhs)
+                                logger.debug("[MOV] register-to-register") 
+                                reg = inv_reg_field_encoding[lhs][0]
+                                w = "1" if lhs[-1] == "x" else "0"
+                            except ValueError:
+                                raise KeyError(f"Invalid register: {rhs}")
+                        else:
+                            logger.debug("register-to-register MOV") 
+
+                        rm, _ = inv_reg_field_encoding.get(lhs, tuple())
                     except KeyError as e:
                         logger.error("Line %d: Invalid register: %s", line_num, e)
                         sys.exit(1)

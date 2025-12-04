@@ -1,37 +1,14 @@
 {
     "version": "0.2.0",
     "configurations": [
+
         {
-            "name": "Assemble (simple)",
+            "name": "Assemble",
             "type": "debugpy",
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal",
-            "args": "-a A -i examples/listing_0037_single_register_mov.asm -o listing_0037_single_register_mov"
+            "args": "-a A -i examples/listing_0039_more_movs.asm -o listing_0039_more_movs"
         },
-        {
-            "name": "Disassemble (simple)",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "main.py",
-            "console": "integratedTerminal",
-            "args": "-a D -i listing_0037_single_register_mov -o listing_0037_single_register_mov"
-        },
-        {
-            "name": "Assemble (multiple)",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "main.py",
-            "console": "integratedTerminal",
-            "args": "-a A -i examples/listing_0038_many_register_mov.asm -o listing_0038_many_register_mov"
-        },
-        {
-            "name": "Disassemble (multiple)",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "main.py",
-            "console": "integratedTerminal",
-            "args": "-a D -i examples/listing_0038_many_register_mov -o listing_0038_many_register_mov"
-        }
     ]
 }

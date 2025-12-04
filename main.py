@@ -26,15 +26,24 @@ MOD_REGISTER_TO_REGISTER: str = "11"
 class Instructions(str, Enum):
     MOV = "mov"
 
+class MOVTypes(str, Enum):
+    RM_FT_R = "Register/memory to/from register"
+    I_T_RM = "Immediate to register/memory"
+
 instruction_map: Dict[str, Instructions] = {
-    ("100010", "Register/memory to/from register") : Instructions.MOV #START FROM HERE dam
+    ("100010", MOVTypes.RM_FT_R): Instructions.MOV,
+    ("1100011", MOVTypes.I_T_RM): Instructions.MOV
 }
 
+inv_instruction_map = {
+    Instructions.MOV: {
+        MOVTypes.RM_FT_R: "100010",
+        MOVTypes.I_T_RM: "1100011",
+    }
+}
 def invert_map(mapping: Dict[Any, Any]) -> Dict[Any, Any]:
     """Create reverse mapping from values to keys."""
     return {v: k for k, v in mapping.items()}
-
-inv_instruction_map: Dict[Instructions, str] = invert_map(instruction_map)
 
 reg_field_encoding: Dict[Tuple[str, str], str] = {
     # (REG, W) 
@@ -163,7 +172,7 @@ def assemble(input_path: str, output_path: str) -> None:
                         logger.error("Line %d: Invalid register: %s", line_num, e)
                         sys.exit(1)
 
-                    opcode_int: int = int(inv_instruction_map[Instructions.MOV], 2)
+                    opcode_int: int = int(inv_instruction_map[Instructions.MOV][MOVTypes.RM_FT_R], 2)  # re-visit this now that MOV has several opcodes
                     d_int: int = 0  # direction: 0 = to REG
                     w_int: int = int(w, 2)  # width bit (0 or 1)
                     reg_int: int = int(reg, 2)  # 3-bit reg field
@@ -230,7 +239,7 @@ def disassemble(input_path: str, output_path: str) -> None:
                     
                     opcode = bin(word[0] >> 2)[2:].zfill(6)
                     
-                    if instruction := instruction_map.get(opcode):
+                    if instruction := instruction_map.get(opcode): # re-visit this now that MOV may have diff opcodes
                         logger.debug("Instruction %d: Identified %s instruction", instruction_count, instruction.value)
                         
                         if instruction == Instructions.MOV:

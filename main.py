@@ -117,7 +117,8 @@ def assemble(input_path: str, output_path: str) -> None:
         with open(input_file) as f:
             for line_num, line in enumerate(f, 1):
                 line = line.rstrip()
-                
+                if line_num == 24:
+                    print()
                 if not line:
                     logger.debug("Line %d: Skipping empty/blank line", line_num)
                     continue
@@ -148,24 +149,27 @@ def assemble(input_path: str, output_path: str) -> None:
                     try:
                         reg, w = inv_reg_field_encoding.get(rhs, (None, None))
                         if reg is None:
+                            logger.debug("[MOV] Immediate to register/memory")
+
                             if "[" in rhs and "]" in rhs:
-                               logger.debug("[MOV] Immediate-to-register")
+                               logger.debug("Src address calc required")
                                m = re.search(r'\[(.*?)\]', rhs)
                                if m:
                                    src_add_calc_lhs = m.group(1).split('+')[0]
                                    src_add_calc_rhs = m.group(1).split('+')[1]
                                    rm = eff_addr_encoding.get((src_add_calc_lhs, src_add_calc_rhs))
-                                   first_byte = int(, 2)
-                                   
-                            try:
+                            else:
                                 int(rhs)
-                                logger.debug("[MOV] register-to-register") 
+                                w = "1" if lhs[-1] == "x" else "0"
+                                # should i set mod to 11 and use that table?
+                        else:
+                            logger.debug("[MOV] Register/memory to/from register") 
+                            try:
+                                #int(rhs)
                                 reg = inv_reg_field_encoding[lhs][0]
                                 w = "1" if lhs[-1] == "x" else "0"
                             except ValueError:
                                 raise KeyError(f"Invalid register: {rhs}")
-                        else:
-                            logger.debug("register-to-register MOV") 
 
                         rm, _ = inv_reg_field_encoding.get(lhs, tuple())
                     except KeyError as e:

@@ -117,8 +117,6 @@ def assemble(input_path: str, output_path: str) -> None:
         with open(input_file) as f:
             for line_num, line in enumerate(f, 1):
                 line = line.rstrip()
-                if line_num == 24:
-                    print()
                 if not line:
                     logger.debug("Line %d: Skipping empty/blank line", line_num)
                     continue
@@ -145,10 +143,12 @@ def assemble(input_path: str, output_path: str) -> None:
 
                 if instruction_name == Instructions.MOV:
                     logger.debug("Line %d: Identified %s instruction", line_num, instruction_name)
-
+                    if line_num == 34:
+                        print()
                     try:
                         reg, w = inv_reg_field_encoding.get(rhs, (None, None))
                         if reg is None:
+                            reg = "000"
                             logger.debug("[MOV] Immediate to register/memory")
 
                             if "[" in rhs and "]" in rhs:
@@ -170,7 +170,7 @@ def assemble(input_path: str, output_path: str) -> None:
                                 w = "1" if lhs[-1] == "x" else "0"
                             except ValueError:
                                 raise KeyError(f"Invalid register: {rhs}")
-
+                        w = "1" if lhs[-1] == "x" else "0"
                         rm, _ = inv_reg_field_encoding.get(lhs, tuple())
                     except KeyError as e:
                         logger.error("Line %d: Invalid register: %s", line_num, e)

@@ -30,6 +30,25 @@ class MOVTypes(str, Enum):
     RM_FT_R = "Register/memory to/from register"
     I_T_RM = "Immediate to register/memory"
 
+class Registers(str, Enum):
+    AL = "al"
+    AH = "ah"
+    AX = "ax"
+    BL = "bl"
+    BH = "bh"
+    BX = "bx"
+    CL = "cl"
+    CH = "ch"
+    CX = "cx"
+    DL = "dl"
+    DH = "dh"
+    DX = "dx"
+    SP = "sp"
+    BP = "bp"
+    SI = "si"
+    DI = "di"
+
+
 instruction_map: Dict[str, Instructions] = {
     ("100010", MOVTypes.RM_FT_R): Instructions.MOV,
     ("1100011", MOVTypes.I_T_RM): Instructions.MOV
@@ -47,34 +66,34 @@ def invert_map(mapping: Dict[Any, Any]) -> Dict[Any, Any]:
 
 reg_field_encoding: Dict[Tuple[str, str], str] = {
     # (REG, W) 
-    ("000", "0"): "al",
-    ("000", "1"): "ax",
-    ("001", "0"): "cl",
-    ("001", "1"): "cx",
-    ("010", "0"): "dl",
-    ("010", "1"): "dx",
-    ("011", "0"): "bl",
-    ("011", "1"): "bx",
-    ("100", "0"): "ah",
-    ("100", "1"): "sp",
-    ("101", "0"): "ch",
-    ("101", "1"): "bp",
-    ("110", "0"): "dh",
-    ("110", "1"): "si",
-    ("111", "0"): "bh",
-    ("111", "1"): "di",
+    ("000", "0"): Registers.AL,
+    ("000", "1"): Registers.AX,
+    ("001", "0"): Registers.CL,
+    ("001", "1"): Registers.CX,
+    ("010", "0"): Registers.DL,
+    ("010", "1"): Registers.DX,
+    ("011", "0"): Registers.BL,
+    ("011", "1"): Registers.BX,
+    ("100", "0"): Registers.AH,
+    ("100", "1"): Registers.SP,
+    ("101", "0"): Registers.CH,
+    ("101", "1"): Registers.BP,
+    ("110", "0"): Registers.DH,
+    ("110", "1"): Registers.SI,
+    ("111", "0"): Registers.BH,
+    ("111", "1"): Registers.DI,
 }
 
 eff_addr_encoding= {
     # (Register1, Register2): R/M
-    ("bx", "si"): "000",
-    ("bx", "di"): "001",
-    ("bp", "si"): "010",
-    ("bp", "di"): "011",
-    ("si", None): "100",
-    ("di", None): "101",
-    ("bx", None): "110",        
-    ("bp", None): "111",        
+    (Registers.BX, Registers.SI): "000",
+    (Registers.BX, Registers.DI): "001",
+    (Registers.BP, Registers.SI): "010",
+    (Registers.BP, Registers.DI): "011",
+    (Registers.SI, None): "100",
+    (Registers.DI, None): "101",
+    (Registers.BX, None): "110",        
+    (Registers.BP, None): "111",        
 }
 
 inv_reg_field_encoding: Dict[str, Tuple[str, str]] = invert_map(reg_field_encoding)
@@ -143,8 +162,6 @@ def assemble(input_path: str, output_path: str) -> None:
 
                 if instruction_name == Instructions.MOV:
                     logger.debug("Line %d: Identified %s instruction", line_num, instruction_name)
-                    if line_num == 34:
-                        print()
                     try:
                         reg, w = inv_reg_field_encoding.get(rhs, (None, None))
                         if reg is None:
@@ -155,17 +172,24 @@ def assemble(input_path: str, output_path: str) -> None:
                                logger.debug("Src address calc required")
                                m = re.search(r'\[(.*?)\]', rhs)
                                if m:
-                                   src_add_calc_lhs = m.group(1).split('+')[0]
-                                   src_add_calc_rhs = m.group(1).split('+')[1]
-                                   rm = eff_addr_encoding.get((src_add_calc_lhs, src_add_calc_rhs))
+                                in_brackets = m.group(1)
+                                if in_brackets.count('x') == 2:
+                                    src_add_calc_lhs, src_add_calc_rhs = in_brackets.split('+')
+                                    rm = eff_addr_encoding.get((src_add_calc_lhs, src_add_calc_rhs))
+                                elif in_brackets.count('x') == 3:
+                                    src_add_calc_lhs, src_add_calc_rhs, disp = in_brackets.split('+')
+                                    rm = eff_addr_encoding.get((src_add_calc_lhs, src_add_calc_rhs))
+                                    print()
+                                elif in_brackets in (Registers.SI, Registers.DI, Registers.BX, Registers.BP):
+                                    rm = eff_addr_encoding.get((in_brackets, None))
+                                else:
+                                    raise ValueError("Line: %s, Invalid instruction: %s", line_num, line)                                    
                             else:
                                 int(rhs)
                                 w = "1" if lhs[-1] == "x" else "0"
-                                # should i set mod to 11 and use that table?
                         else:
                             logger.debug("[MOV] Register/memory to/from register") 
                             try:
-                                #int(rhs)
                                 reg = inv_reg_field_encoding[lhs][0]
                                 w = "1" if lhs[-1] == "x" else "0"
                             except ValueError:

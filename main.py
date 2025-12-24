@@ -103,8 +103,16 @@ def _parse_instruction_line(line: str, line_num: int) -> Optional[Tuple[str, str
     """Parse a source line into (instruction, lhs, rhs).
     - Normalizes to lower-case
     - Splits on commas and whitespace so `mov cx,bx` and `mov cx, bx` both work
-    - Raises ValueError on malformed input or unexpected extra tokens
+    - Raises ValueError on malformed input
     """
+    dest_calc, src_calc = False, False
+
+    before_comma, after_comma = line.split(",")
+    if "[" in before_comma:
+        dest_calc = True
+    elif "[" in after_comma:
+        src_calc = True
+
     tokens: List[str] = [t for t in re.split(r"[,\s]+", line) if t]
     if not tokens:
         return None
@@ -113,7 +121,13 @@ def _parse_instruction_line(line: str, line_num: int) -> Optional[Tuple[str, str
         raise ValueError(f"Line {line_num}: Invalid instruction format: {line}")
 
     if len(tokens) > 3:
-        tokens = tokens[:2] + [''.join(tokens[2:])]
+        if src_calc:
+            tokens = tokens[:2] + [''.join(tokens[2:])]
+        elif dest_calc:
+            tokens = tokens[:1] + [''.join(tokens[1:-1])] + [tokens[-1]]
+        else:
+            raise ValueError(f"Line {line_num}: Invalid instruction format: {line}")
+
 
     instruction_name, lhs, rhs = (t.lower() for t in tokens)
     #if rest:
@@ -166,24 +180,23 @@ def assemble(input_path: str, output_path: str) -> None:
                         reg, w = inv_reg_field_encoding.get(rhs, (None, None))
                         if reg is None:
                             reg = "000"
-                            logger.debug("[MOV] Immediate to register/memory")
+                            logger.debug("[MOV] Immediate to register/memory") # not necessarily, it could be dest addres calc
 
                             if "[" in rhs and "]" in rhs:
                                logger.debug("Src address calc required")
                                m = re.search(r'\[(.*?)\]', rhs)
                                if m:
                                 in_brackets = m.group(1)
-                                if in_brackets.count('x') == 2:
+                                if in_brackets.count('+') == 1:
                                     src_add_calc_lhs, src_add_calc_rhs = in_brackets.split('+')
                                     rm = eff_addr_encoding.get((src_add_calc_lhs, src_add_calc_rhs))
-                                elif in_brackets.count('x') == 3:
+                                elif in_brackets.count('+') == 2:
                                     src_add_calc_lhs, src_add_calc_rhs, disp = in_brackets.split('+')
                                     rm = eff_addr_encoding.get((src_add_calc_lhs, src_add_calc_rhs))
-                                    print()
                                 elif in_brackets in (Registers.SI, Registers.DI, Registers.BX, Registers.BP):
                                     rm = eff_addr_encoding.get((in_brackets, None))
                                 else:
-                                    raise ValueError("Line: %s, Invalid instruction: %s", line_num, line)                                    
+                                    raise ValueError(f"Line: {line_num}, Invalid instruction: {line}")
                             else:
                                 int(rhs)
                                 w = "1" if lhs[-1] == "x" else "0"

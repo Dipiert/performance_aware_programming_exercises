@@ -189,26 +189,29 @@ def assemble(input_path: str, output_path: str) -> None:
                                 in_brackets = m.group(1)
                                 if in_brackets.count('+') == 1:
                                     src_add_calc_lhs, src_add_calc_rhs = in_brackets.split('+')
-                                    rm = eff_addr_encoding.get((src_add_calc_lhs, src_add_calc_rhs))
+                                    reg = eff_addr_encoding.get((src_add_calc_lhs, src_add_calc_rhs))
                                 elif in_brackets.count('+') == 2:
                                     src_add_calc_lhs, src_add_calc_rhs, disp = in_brackets.split('+')
-                                    rm = eff_addr_encoding.get((src_add_calc_lhs, src_add_calc_rhs))
+                                    reg = eff_addr_encoding.get((src_add_calc_lhs, src_add_calc_rhs))
                                 elif in_brackets in (Registers.SI, Registers.DI, Registers.BX, Registers.BP):
-                                    rm = eff_addr_encoding.get((in_brackets, None))
+                                    reg = eff_addr_encoding.get((in_brackets, None))
                                 else:
                                     raise ValueError(f"Line: {line_num}, Invalid instruction: {line}")
                             else:
                                 int(rhs)
-                                w = "1" if lhs[-1] == "x" else "0"
                         else:
                             logger.debug("[MOV] Register/memory to/from register") 
                             try:
-                                reg = inv_reg_field_encoding[lhs][0]
-                                w = "1" if lhs[-1] == "x" else "0"
+                                if "[" in lhs:
+                                    lhs = lhs.replace("[", "")
+                                    lhs = lhs.replace("]", "")
+                                    reg = eff_addr_encoding.get(tuple(lhs.split("+")))
+                                else:
+                                    reg = inv_reg_field_encoding[lhs][0]
                             except ValueError:
                                 raise KeyError(f"Invalid register: {rhs}")
                         w = "1" if lhs[-1] == "x" else "0"
-                        rm, _ = inv_reg_field_encoding.get(lhs, tuple())
+                        #rm, _ = inv_reg_field_encoding.get(lhs, tuple())
                     except KeyError as e:
                         logger.error("Line %d: Invalid register: %s", line_num, e)
                         sys.exit(1)
@@ -217,11 +220,11 @@ def assemble(input_path: str, output_path: str) -> None:
                     d_int: int = 0  # direction: 0 = to REG
                     w_int: int = int(w, 2)  # width bit (0 or 1)
                     reg_int: int = int(reg, 2)  # 3-bit reg field
-                    rm_int: int = int(rm, 2)  # 3-bit r/m field
+                    #rm_int: int = int(rm, 2)  # 3-bit r/m field
 
                     first_byte: int = (opcode_int << 2) | (d_int << 1) | w_int
                     mod_int: int = int(MOD_REGISTER_TO_REGISTER, 2)
-                    second_byte: int = (mod_int << 6) | (reg_int << 3) | rm_int
+                    second_byte: int = (mod_int << 6) | (reg_int << 3) #| rm_int
 
                     if not (0 <= first_byte <= 0xFF and 0 <= second_byte <= 0xFF):
                         logger.error("Line %d: Encoded bytes out of range: %d, %d", 
@@ -233,8 +236,8 @@ def assemble(input_path: str, output_path: str) -> None:
                     debug_bin: str = format(first_byte, '08b') + format(second_byte, '08b')
                     logger.debug("Line %d: Encoded bytes (binary): %s", line_num, debug_bin)
                     logger.debug("Direction: %d, Width: %d", d_int, w_int)
-                    logger.debug("Mode: %s, Reg: %s (%s), R/M: %s (%s)", 
-                               MOD_REGISTER_TO_REGISTER, reg, rhs, rm, lhs)
+                    logger.debug("Mode: %s, Reg: %s (%s)", 
+                               MOD_REGISTER_TO_REGISTER, reg, rhs)
                 else:
                     logger.warning("Line %d: Unsupported instruction: %s", line_num, instruction_name)
         
@@ -280,7 +283,7 @@ def disassemble(input_path: str, output_path: str) -> None:
                     
                     opcode = bin(word[0] >> 2)[2:].zfill(6)
                     
-                    if instruction := instruction_map.get(opcode): # re-visit this now that MOV may have diff opcodes
+                    if instruction := instruction_map.get(opcode): # disassembly breaks here - re-visit this now that MOV may have diff opcodes
                         logger.debug("Instruction %d: Identified %s instruction", instruction_count, instruction.value)
                         
                         if instruction == Instructions.MOV:

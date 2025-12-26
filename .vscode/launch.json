@@ -8,7 +8,17 @@
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal",
-            "args": "-a A -i examples/listing_0039_more_movs.asm -o listing_0039_more_movs"
+            //"args": "-a A -i examples/listing_0039_more_movs.asm -o listing_0039_more_movs"
+            "args": "-a A -i examples/listing_0037_single_register_mov.asm -o listing_0037_single_register_mov"
+        },
+        {
+            "name": "Disassemble",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "main.py",
+            "console": "integratedTerminal",
+            //"args": "-a A -i examples/listing_0039_more_movs.asm -o listing_0039_more_movs"
+            "args": "-a D -i examples/listing_0037_single_register_mov -o result"
         },
     ]
 }

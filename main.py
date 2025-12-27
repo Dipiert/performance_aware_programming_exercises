@@ -27,8 +27,8 @@ class Instructions(str, Enum):
     MOV = "mov"
 
 class MOVTypes(str, Enum):
-    RM_FT_R = "Register/memory to/from register"
-    I_T_RM = "Immediate to register/memory"
+    RM_FT_R = "MOV: Register/memory to/from register"
+    I_T_RM = "MOV: Immediate to register/memory"
 
 class Registers(str, Enum):
     AL = "al"
@@ -49,10 +49,22 @@ class Registers(str, Enum):
     DI = "di"
 
 
-instruction_map: Dict[str, Instructions] = {
-    ("100010", MOVTypes.RM_FT_R): Instructions.MOV,
-    ("1100011", MOVTypes.I_T_RM): Instructions.MOV
+#instruction_map: Dict[str, Instructions] = {
+#    ("100010", MOVTypes.RM_FT_R): Instructions.MOV,
+#    ("1100011", MOVTypes.I_T_RM): Instructions.MOV
+#}
+
+instruction_map : Dict[str, Instructions] = {
+    "100010": MOVTypes.RM_FT_R,
+    "1100011": MOVTypes.I_T_RM,
 }
+
+def is_move_type(value):
+    try:
+        MOVTypes(value)
+        return True
+    except Exception as e:
+        return False
 
 inv_instruction_map = {
     Instructions.MOV: {
@@ -211,7 +223,7 @@ def assemble(input_path: str, output_path: str) -> None:
                             except ValueError:
                                 raise KeyError(f"Invalid register: {rhs}")
                         w = "1" if lhs[-1] == "x" else "0"
-                        #rm, _ = inv_reg_field_encoding.get(lhs, tuple())
+                        #rm, _ = inv_reg_field_encoding.get(lhs, tuple()) # rm != reg when disassembling. Is it relevant when assembling?
                     except KeyError as e:
                         logger.error("Line %d: Invalid register: %s", line_num, e)
                         sys.exit(1)
@@ -282,20 +294,20 @@ def disassemble(input_path: str, output_path: str) -> None:
                     logger.debug("Instruction %d - Second byte: %s", instruction_count, second_byte)
                     
                     opcode = bin(word[0] >> 2)[2:].zfill(6)
-                    
                     if instruction := instruction_map.get(opcode): # disassembly breaks here - re-visit this now that MOV may have diff opcodes
                         logger.debug("Instruction %d: Identified %s instruction", instruction_count, instruction.value)
                         
-                        if instruction == Instructions.MOV:
+                        if is_move_type(instruction):
+                            instruction = "mov" # this must be wrong, the instruction type needs must need to be used at some point.
                             d = format((word[0] >> 1) & 1, '01b')
                             w = format(word[0] & 1, '01b')
                             logger.debug("Direction: %s, Width: %s", d, w)
                             
                             mod = format(word[1] >> 6, '02b')
                             reg_bin = format((word[1] >> 3) & 0b111, '03b')
-                            reg = reg_field_encoding.get((reg_bin, w))
+                            reg = reg_field_encoding.get((reg_bin, w)).value
                             rm_bin = format(word[1] & 0b111, '03b')
-                            rm = reg_field_encoding.get((rm_bin, w))
+                            rm = reg_field_encoding.get((rm_bin, w)).value
                             
                             logger.debug("Mode: %s, Register: %s (%s), R/M: %s (%s)", 
                                        mod, reg_bin, reg, rm_bin, rm)

@@ -8,7 +8,6 @@
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal",
-            //"args": "-a A -i examples/listing_0039_more_movs.asm -o listing_0039_more_movs"
             "args": "-a A -i examples/listing_0039_more_movs.asm -o listing_0039_more_movs"
         },
         {
@@ -17,7 +16,7 @@
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal",
-            "args": "-a D -i examples/listing_0039_more_movs -o result"
+            "args": "-a D -i listing_0039_more_movs -o result"
         },
     ]
 }

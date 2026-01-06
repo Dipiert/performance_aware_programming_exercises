@@ -23,6 +23,12 @@ WORD_SIZE: int = 2  # bytes
 BYTE_WIDTH: int = 8  # bits
 MOD_REGISTER_TO_REGISTER: str = "11"
 
+class MODFieldEncoding(str, Enum):
+    REGISTER_TO_REGISTER = "11"
+    REGISTER_TO_MEMORY_NO_DISP = "00"
+    REGISTER_TO_MEMORY_8BIT_DISP = "01"
+    REGISTER_TO_MEMORY_16BIT_DISP = "10"
+
 class Instructions(str, Enum):
     MOV = "mov"
 
@@ -30,24 +36,29 @@ class MOVTypes(str, Enum):
     RM_FT_R = "MOV: Register/memory to/from register"
     I_T_RM = "MOV: Immediate to register/memory"
 
-class Registers(str, Enum):
+
+class _8bitRegisters(str, Enum):
     AL = "al"
     AH = "ah"
-    AX = "ax"
     BL = "bl"
     BH = "bh"
-    BX = "bx"
     CL = "cl"
     CH = "ch"
-    CX = "cx"
     DL = "dl"
     DH = "dh"
+    
+class _16bitRegisters(str, Enum):
+    AX = "ax"
+    BX = "bx"
+    CX = "cx"
     DX = "dx"
     SP = "sp"
     BP = "bp"
     SI = "si"
     DI = "di"
 
+class Registers(_8bitRegisters, _16bitRegisters):
+    pass
 
 #instruction_map: Dict[str, Instructions] = {
 #    ("100010", MOVTypes.RM_FT_R): Instructions.MOV,
@@ -147,6 +158,27 @@ def _parse_instruction_line(line: str, line_num: int) -> Optional[Tuple[str, str
 
     return instruction_name, lhs, rhs
 
+def derive_mod_field(lhs, rhs) -> str:
+    """Derive the MOD field based on the operands."""
+    if lhs in Registers and rhs in Registers:
+        # Register to register
+        return MODFieldEncoding.REGISTER_TO_REGISTER.value
+    
+    if "[" in lhs:
+        if rhs in _8bitRegisters:
+            return MODFieldEncoding.REGISTER_TO_MEMORY_8BIT_DISP.value
+        elif rhs in _16bitRegisters:
+            return MODFieldEncoding.REGISTER_TO_MEMORY_16BIT_DISP.value
+    
+    if "[" in rhs:
+        if lhs in _8bitRegisters:
+            return MODFieldEncoding.REGISTER_TO_MEMORY_8BIT_DISP.value
+        elif lhs in _16bitRegisters:
+            return MODFieldEncoding.REGISTER_TO_MEMORY_16BIT_DISP.value
+        
+    return MODFieldEncoding.REGISTER_TO_MEMORY_NO_DISP.value
+
+    
 
 def assemble(input_path: str, output_path: str) -> None:
     """Assemble x86 assembly code to machine code."""
@@ -190,6 +222,9 @@ def assemble(input_path: str, output_path: str) -> None:
                     logger.debug("Line %d: Identified %s instruction", line_num, instruction_name)
                     try:
                         reg, w = inv_reg_field_encoding.get(rhs, (None, None))
+                        if reg is None:
+                            reg, w = inv_reg_field_encoding.get(lhs, (None, None))
+                            
                         if reg is None:
                             reg = "000"
                             logger.debug("[MOV] Immediate to register/memory") # not necessarily, it could be dest addres calc
